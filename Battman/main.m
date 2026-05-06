@@ -32,6 +32,7 @@ extern int _NSGetExecutablePath(char* buf, uint32_t* bufsize);
 #endif
 
 #import <UserNotifications/UserNotifications.h>
+#import "CrashLogger.h"
 
 struct localization_entry {
 	CFStringRef *cfstr;
@@ -298,6 +299,10 @@ os_log_t gLogDaemon;
 battman_type_t gAppType = BATTMAN_SUBPROCESS;
 
 int main(int argc, char * argv[]) {
+	// Install crash handlers early
+	[CrashLogger installCrashHandlers];
+	[CrashLogger logMessage:@"=== App Started ==="];
+	
 	gLog = os_log_create("com.torrekie.Battman", "default");
 	if (gLog == NULL) {
 		os_log_error(OS_LOG_DEFAULT, "Couldn't create os log object");
@@ -373,14 +378,10 @@ int main(int argc, char * argv[]) {
     // sleep(10);
     if (is_carbon()) {
 #if TARGET_OS_IPHONE
-		//protect_method(UIViewController,presentViewController:animated:completion:,push_fatal_notif);
-		protect_method(UIWindow,alloc,NULL);
-		protect_method(UIWindow,makeKeyAndVisible,push_fatal_notif);
-//		protect_method(NSURLSession,dataTaskWithURL:completionHandler:,NULL);
-//		protect_method(NSURLSession,dataTaskWithRequest:completionHandler:,NULL);
-//		protect_method(NSURLSession,resume,NULL);
-		extern NSString *battman_bootstrap(char *, int);
-        return UIApplicationMain(argc, argv, nil, battman_bootstrap("", 0));
+	    @autoreleasepool{
+		    extern NSString *battman_bootstrap(char *, int);
+		    return UIApplicationMain(argc, argv, nil, battman_bootstrap("", 0));
+	    }
 #else
         @autoreleasepool {
         }

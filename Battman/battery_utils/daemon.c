@@ -9,6 +9,7 @@
 
 #include "../common.h"
 #include "../iokitextern.h"
+#include "../intlextern.h"
 #include "libsmc.h"
 #include <CoreFoundation/CFDictionary.h>
 #include <CoreFoundation/CFNumber.h>
@@ -53,8 +54,27 @@ static int CH0ICache = -1;
 static int CH0CCache = -1;
 static int last_power_level = -1;
 static char daemon_settings_path[1024];
+static int8_t last_charging_port = -1; // Track last known charging port to detect transitions
 
 static void update_power_level(int);
+
+static void cleanup_daemon_files(void) {
+	char cleanup_path[1024];
+	char *end = stpcpy(stpcpy(cleanup_path, battman_config_dir()), "/daemon");
+	strcpy(end, ".run");
+	if (unlink(cleanup_path) == 0) {
+		NSLog(CFSTR("Daemon: Cleaned up PID file"));
+	}
+	strcpy(end, "_settings");
+	if (unlink(cleanup_path) == 0) {
+		NSLog(CFSTR("Daemon: Cleaned up settings file"));
+	}
+	// Clean up socket file
+	const char *socket_path = battman_socket_path();
+	if (unlink(socket_path) == 0) {
+		NSLog(CFSTR("Daemon: Cleaned up socket file"));
+	}
+}
 
 static void daemon_control_thread(int fd) {
 	// XXX: Consider use XPC or dispatch?
@@ -63,6 +83,8 @@ static void daemon_control_thread(int fd) {
 		if (read(fd, &cmd, 1) <= 0) {
 			NSLog(CFSTR("Daemon: Closing bc %s"), strerror(errno));
 			close(fd);
+			set_badge(NULL);
+			cleanup_daemon_files();
 			return;
 		}
 		NSLog(CFSTR("Daemon: READ cmd %d"), (int)cmd);
@@ -72,6 +94,8 @@ static void daemon_control_thread(int fd) {
 			smc_write_safe('CH0C', &val, 1);
 			write(fd, &cmd, 1);
 			close(fd);
+			set_badge(NULL);
+			cleanup_daemon_files();
 			exit(0);
 		} else if (cmd == 2) {
 			write(fd, &cmd, 1);
@@ -79,6 +103,7 @@ static void daemon_control_thread(int fd) {
 			update_power_level(last_power_level);
 		} else if (cmd == 5) {
 			close(fd);
+			set_badge(NULL);
 			pthread_exit(NULL);
 		} else if (cmd == 6) {
 			// Redirect logs
@@ -117,8 +142,11 @@ static void daemon_control_thread(int fd) {
 static void daemon_control() {
 	struct sockaddr_un sockaddr;
 	sockaddr.sun_family = AF_UNIX;
-	chdir(battman_config_dir());
-	strcpy(sockaddr.sun_path, "./dsck");
+	
+	const char *socket_path = battman_socket_path();
+	strncpy(sockaddr.sun_path, socket_path, sizeof(sockaddr.sun_path) - 1);
+	sockaddr.sun_path[sizeof(sockaddr.sun_path) - 1] = '\0';
+	
 	remove(sockaddr.sun_path);
 	umask(0);
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -187,59 +215,90 @@ static int obc_switch(bool on) {
    CH0R is controlled by BMS, the only condition we had to notice is low flag 1 (0010), which typically means no AC power provided. We should avoid writing keys when this flag matched.
  */
 
-static void power_switch_safe(bool on, bool override_obc, bool keep_ac) {
-	uint32_t ret4 = 0;
-	smc_read_n('CH0R', &ret4, sizeof(ret4));
-	/* Bit 1: No VBUS */
-	if (ret4 & (1 << 1))
-		return;
-
+static void power_switch_safe(bool inhibit_charging, bool override_obc, bool keep_ac) {
 	uint8_t ret1 = 0;
 	/* ExternalConnected also refers to inflow state */
 	smc_read_n('CHCE', &ret1, sizeof(ret1));
-	if (!ret1)
+	if (!ret1) {
+		set_badge("⊗"); // No adapter connected
 		return;
+	}
+
+	uint32_t ret4 = 0;
+	smc_read_n('CH0R', &ret4, sizeof(ret4));
+	/* Bit 1: No VBUS */
+	if (ret4 & (1 << 1)) {
+		set_badge("⏻"); // Stopped for some reason
+		return;
+	}
 
 	// keep_ac should only be set when drain unset
 	ret1 = 0;
+	bool obc_taken = false;
 	if (keep_ac) {
-		NSLog(CFSTR("Daemon setting CH0C %s"), on ? "on" : "off");
+		NSLog(CFSTR("Daemon setting CH0C %s"), inhibit_charging ? "inhibit" : "allow");
 		smc_read_n('CH0C', &ret1, sizeof(ret1));
 		/* Bit 0: On/Off (setbatt) */
 		/* Bit 1: OBC or no VBUS */
-		if (ret1 & (1 << 1) && override_obc) {
-			obc_switch(false);
-			smc_write_safe('CH0B', &on, 1);
+		if (ret1 & (1 << 1)) {
+			if (override_obc) {
+				obc_switch(false);
+				smc_write_safe('CH0B', &inhibit_charging, 1);
+			} else {
+				obc_taken = true;
+			}
 		}
 		/* No need to keep other bits when setting, BMS is automatically doing it */
-		if (on != CH0CCache) {
-			CH0CCache = on;
-			smc_write_safe('CH0C', &on, 1);
+		if (inhibit_charging != CH0CCache) {
+			CH0CCache = inhibit_charging;
+			smc_write_safe('CH0C', &inhibit_charging, 1);
 		}
 	} else {
-		NSLog(CFSTR("Daemon setting CH0I %s"), on ? "on" : "off");
+		NSLog(CFSTR("Daemon setting CH0I %s"), inhibit_charging ? "inhibit" : "allow");
 		/* Bit 0: On/Off (Inhibit inflow) */
 		/* Bit 1: OBC or no VBUS */
 		/* Bit 5: Field Diagnostics */
 		// Otherwise, just cut off AC to stop charging
 		smc_read_n('CH0I', &ret1, sizeof(ret1));
-		if (ret1 & (1 << 1) && override_obc) {
-			obc_switch(false);
+		if (ret1 & (1 << 1)) {
+			if (override_obc)
+				obc_switch(false);
+			else
+				obc_taken = true;
 			// Do not explicitly set CH0J, it will add Bit 5 instead of Bit 1
 			// Resulting in NOT_CHARGING_REASON_FIELDDIAGS
-			// smc_write_safe('CH0J', &on, 1);
+			// smc_write_safe('CH0J', &inhibit_charging, 1);
 		}
 		/* No need to keep other bits when setting, BMS is automatically doing it */
-		if (on != CH0ICache) {
-			CH0ICache = on;
-			smc_write_safe('CH0I', &on, 1);
+		if (inhibit_charging != CH0ICache) {
+			CH0ICache = inhibit_charging;
+			smc_write_safe('CH0I', &inhibit_charging, 1);
 		}
 	}
+	if (obc_taken)
+		set_badge("⎋"); // OBC taken
+	else
+		set_badge(inhibit_charging ? "⏾" : "▶"); // Charging allowed/inhibited state
 }
 
 static void update_power_level(int val) {
 	if (val == -1)
 		return;
+
+	// Check for wireless charging and show notification when transitioning to wireless
+	mach_port_t adapter_family;
+	device_info_t adapter_info;
+	charging_state_t charging_stat = is_charging(&adapter_family, &adapter_info);
+	if (charging_stat > 0 && adapter_info.port == 2 && last_charging_port != 2) {
+		// Transitioned to wireless charging (port 2), show notification
+		add_notification("com.apple.powerui.lowpowermode",
+		                _C("Charging Limit Unavailable"),
+		                _C("Wireless Charging Detected"),
+		                _C("Charging limit controls are not supported with wireless charging. Use a wired connection for reliable functionality."));
+	}
+	// Update last known charging port
+	last_charging_port = (charging_stat > 0) ? adapter_info.port : -1;
+
 	last_power_level = val;
 
 	char keep_ac = BIT_GET(daemon_settings->drain_config, 0);
@@ -265,6 +324,7 @@ static void powerevent_listener(int a, io_registry_entry_t b, int32_t c) {
 
 	if (access(daemon_settings_path, F_OK) == -1) {
 		// Quit when app removed or daemon no longer needed
+		cleanup_daemon_files();
 		exit(0);
 	}
 	// XXX: Guards?
@@ -279,17 +339,54 @@ void daemon_main(void) {
 	signal(SIGPIPE, SIG_IGN);
 	char *end = stpcpy(stpcpy(daemon_settings_path, battman_config_dir()), "/daemon");
 	strcpy(end, ".run");
-	int runfd = open(daemon_settings_path, O_RDWR | O_CREAT, 0666);
+
+	// Check for and clean up any stale PID file
+	int existing_runfd = open(daemon_settings_path, O_RDONLY);
+	if (existing_runfd != -1) {
+		pid_t old_pid;
+		if (read(existing_runfd, &old_pid, sizeof(old_pid)) == sizeof(old_pid)) {
+			// Check if the old process still exists
+			if (kill(old_pid, 0) != 0 && errno == ESRCH) {
+				// Process doesn't exist, clean up stale files
+				NSLog(CFSTR("Daemon: Found stale PID file for dead process %d, cleaning up"), old_pid);
+				close(existing_runfd);
+				unlink(daemon_settings_path);
+				// Also try to clean up socket file
+				strcpy(end, "_socket");
+				unlink(daemon_settings_path);
+				strcpy(end, ".run");
+			} else {
+				close(existing_runfd);
+				// Another daemon might be running
+				NSLog(CFSTR("Daemon: Another daemon (PID %d) appears to be running, exiting"), old_pid);
+				exit(0);
+			}
+		} else {
+			close(existing_runfd);
+		}
+	}
+
+	int runfd = open(daemon_settings_path, O_RDWR | O_CREAT | O_EXCL, 0666);
+	if (runfd == -1) {
+		// Failed to create PID file (another daemon might be running)
+		NSLog(CFSTR("Daemon: Failed to create PID file, another daemon may be running"));
+		exit(0);
+	}
 	pid_t pid = getpid();
 	write(runfd, &pid, 4);
 	close(runfd);
+	NSLog(CFSTR("Daemon: Started with PID %d"), pid);
 	strcpy(end, "_settings");
 	int settingsfd = open(daemon_settings_path, O_RDONLY);
-	if (settingsfd == -1)
+	if (settingsfd == -1) {
+		cleanup_daemon_files(); // Clean up PID file since we created it
 		exit(0); // Not enabled
+	}
 	daemon_settings = mmap(NULL, sizeof(struct battman_daemon_settings), PROT_READ, MAP_SHARED, settingsfd, 0);
-	if (!daemon_settings)
+	if (!daemon_settings) {
+		cleanup_daemon_files(); // Clean up PID file since we created it
 		exit(0);
+	}
 	close(settingsfd);
 	smc_open();
 	// FIXME: Implement standalone listeners for daemon
@@ -302,11 +399,21 @@ void daemon_main(void) {
 int battman_run_daemon(void) {
 	posix_spawnattr_t sattr;
 	posix_spawnattr_init(&sattr);
-	posix_spawnattr_set_persona_np(&sattr, 99, 1);
+	posix_spawnattr_set_persona_np(&sattr, 99, 1); // POSIX_SPAWN_PERSONA_FLAGS_OVERRIDE
 	posix_spawnattr_set_persona_uid_np(&sattr, 0);
 	posix_spawnattr_set_persona_gid_np(&sattr, 0);
 	posix_spawnattr_setprocesstype_np(&sattr, 0x300); // daemon standard
-	posix_spawnattr_setjetsam_ext(&sattr, 0, 3, 80, 80);
+	// JETSAM_PRIORITY_IMPORTANT(18) or JETSAM_PRIORITY_BACKGROUND(3)?
+	// FIXME: Consider add a toggle for it
+	int priority = 18;
+	if (__builtin_available(iOS 16.0, *)) {
+		priority = 180;
+	}
+	// XXX: Consider force to UI role, since this was not a real launchdaemon
+	// posix_spawnattr_set_darwin_role_np(&attr, PRIO_DARWIN_ROLE_UI);
+
+	// Limit 80 MiB
+	posix_spawnattr_setjetsam_ext(&sattr, 0, priority, 80, 80);
 #ifndef POSIX_SPAWN_SETSID
 #define POSIX_SPAWN_SETSID 0x400
 #endif

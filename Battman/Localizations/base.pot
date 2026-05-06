@@ -6,9 +6,9 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Battman 1.0.1\n"
+"Project-Id-Version: Battman 1.0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-12 15:46+0800\n"
+"POT-Creation-Date: 2026-01-19 14:04+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -120,7 +120,7 @@ msgstr ""
 msgid "Source Code"
 msgstr ""
 
-msgid "Battman Wiki & User Manual"
+msgid "Battman User Manual"
 msgstr ""
 
 msgid "Support Us"
@@ -178,15 +178,18 @@ msgid ""
 "These values can’t be overridden when the Charging Limit daemon is running."
 msgstr ""
 
-#, objc-format
-msgid ""
-"Block Charging suspends battery charging and allows the battery to discharge "
-"while maintaining power source operation. %@"
+msgid "Certain values may not be overridable when no wired A/C connected."
 msgstr ""
 
 msgid ""
 "Certain values may not be overridable when Optimized Battery Charging is "
 "enabled."
+msgstr ""
+
+#, objc-format
+msgid ""
+"Block Charging suspends battery charging and allows the battery to discharge "
+"while maintaining power source operation. %@"
 msgstr ""
 
 msgid ""
@@ -220,10 +223,22 @@ msgstr ""
 msgid "Something went wrong when setting this property."
 msgstr ""
 
+#, objc-format
+msgid "Current device has no builtin LowPowerMode framework (%@)."
+msgstr ""
+
 msgid "Failed to load"
 msgstr ""
 
 msgid "Unable to set Low Power Mode."
+msgstr ""
+
+#, objc-format
+msgid "This device does not allow setting notify register '%s'."
+msgstr ""
+
+#, objc-format
+msgid "This device does not seem to be using notify register '%s'."
 msgstr ""
 
 msgid "Failed to enable Smart Charging."
@@ -314,7 +329,8 @@ msgstr ""
 msgid "Camera Module"
 msgstr ""
 
-msgid "Thermal Pressure"
+#. TRANSLATORS: This is indicating 'Thermal Pressure', please make sure it won't be longer than 'Pressure' to ensure it can be fully displayed
+msgid "Pressure"
 msgstr ""
 
 msgid "Thermal Notification Level"
@@ -467,6 +483,30 @@ msgstr ""
 msgid "Default"
 msgstr ""
 
+msgid "Brightness Slider"
+msgstr ""
+
+msgid "Brightness Limits (nits)"
+msgstr ""
+
+msgid "Slider Max"
+msgstr ""
+
+msgid "Dimming"
+msgstr ""
+
+msgid "EDR"
+msgstr ""
+
+msgid "Present"
+msgstr ""
+
+msgid "Physical"
+msgstr ""
+
+msgid "Min (Dimming)"
+msgstr ""
+
 msgid "Battery Avg."
 msgstr ""
 
@@ -529,7 +569,6 @@ msgstr ""
 msgid "Proceed"
 msgstr ""
 
-#, c-format
 msgid "Are you 100% sure?"
 msgstr ""
 
@@ -609,6 +648,27 @@ msgstr ""
 msgid "Refetch Data"
 msgstr ""
 
+msgid "Screen Hardware Temperature"
+msgstr ""
+
+msgid "Resolution"
+msgstr ""
+
+msgid "Color Gamut"
+msgstr ""
+
+msgid "Temperature"
+msgstr ""
+
+msgid "Night Shift"
+msgstr ""
+
+msgid "True Tone"
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
 msgid "Learn more…"
 msgstr ""
 
@@ -665,9 +725,6 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-msgid "Pressure"
-msgstr ""
-
 msgid "Unavailable"
 msgstr ""
 
@@ -682,7 +739,7 @@ msgstr ""
 
 #, objc-format
 msgid ""
-"Setting thermal pressure to %s may trigger a persistent temperature warning "
+"Setting thermal pressure to %@ may trigger a persistent temperature warning "
 "screen. Do you want to continue?"
 msgstr ""
 
@@ -863,9 +920,6 @@ msgstr ""
 msgid "Brightness Icon"
 msgstr ""
 
-msgid "EDR"
-msgstr ""
-
 msgid "SDR"
 msgstr ""
 
@@ -873,6 +927,12 @@ msgid "Quartz"
 msgstr ""
 
 msgid "Wipe All Battman Data"
+msgstr ""
+
+#, objc-format
+msgid ""
+"This will wipe all data under:\n"
+"%@"
 msgstr ""
 
 #, objc-format
@@ -957,6 +1017,58 @@ msgstr ""
 msgid "Your device does not support sending Emails."
 msgstr ""
 
+msgid "Primary Screen"
+msgstr ""
+
+msgid "Advanced"
+msgstr ""
+
+msgid "Specs (Basic)"
+msgstr ""
+
+msgid ""
+"These limitations are typically determined by the hardware and returned by "
+"the Brightness system."
+msgstr ""
+
+msgid ""
+"These parameters are sourced from the system’s high-level graphics layer. "
+"Because the display is ultimately composed through CoreAnimation and "
+"backboardd before it reaches the screen hardware, the values shown here are "
+"estimates and may not precisely reflect the true behavior of the physical "
+"display."
+msgstr ""
+
+msgid "Brightness Backend"
+msgstr ""
+
+msgid "Standard"
+msgstr ""
+
+msgid "ID"
+msgstr ""
+
+msgid "Ambient Light Sensor"
+msgstr ""
+
+msgid "Refresh Rate"
+msgstr ""
+
+msgid "Color Depth"
+msgstr ""
+
+msgid "Bits"
+msgstr ""
+
+msgid "Unusual Panel ID"
+msgstr ""
+
+msgid "Current part might not be genuine."
+msgstr ""
+
+msgid "Copied!"
+msgstr ""
+
 msgid ""
 "No value returned from sensor, device should be checked by service "
 "technician."
@@ -989,12 +1101,6 @@ msgid "Wrong Data"
 msgstr ""
 
 msgid "Internal Battery"
-msgstr ""
-
-msgid "Copied!"
-msgstr ""
-
-msgid "Advanced"
 msgstr ""
 
 msgid "Type"
@@ -1284,9 +1390,6 @@ msgid "Externel Power 6"
 msgstr ""
 
 msgid "Externel Power 7"
-msgstr ""
-
-msgid "Unknown"
 msgstr ""
 
 msgid "Nominal"
@@ -1694,9 +1797,6 @@ msgstr ""
 msgid "This indicates if accessory is accepting charge."
 msgstr ""
 
-msgid "Temperature"
-msgstr ""
-
 msgid "Acc. Time to Empty"
 msgstr ""
 
@@ -1793,6 +1893,17 @@ msgid "Inactive"
 msgstr ""
 
 msgid "Published Type"
+msgstr ""
+
+msgid "Charging Limit Unavailable"
+msgstr ""
+
+msgid "Wireless Charging Detected"
+msgstr ""
+
+msgid ""
+"Battery limit controls are not supported with wireless charging. Use a wired "
+"connection for reliable functionality."
 msgstr ""
 
 msgid "Accelerometer"
@@ -1931,4 +2042,27 @@ msgid "Negative Power Value"
 msgstr ""
 
 msgid "Not Enough Data Points"
+msgstr ""
+
+msgid "LPM Brightness Reduction"
+msgstr ""
+
+msgid "Dim & Lock"
+msgstr ""
+
+msgid "Reduce the screen brightness when Low Power Mode is enabled."
+msgstr ""
+
+msgid "Auto Dim"
+msgstr ""
+
+msgid "Auto Dim/Lock on A/C"
+msgstr ""
+
+msgid "Notice"
+msgstr ""
+
+msgid ""
+"Turning this off will keep the display from dimming and may shorten battery "
+"life."
 msgstr ""

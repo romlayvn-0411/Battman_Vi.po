@@ -2,6 +2,7 @@
 #include <TargetConditionals.h>
 
 #include <regex.h>
+#include <string.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <grp.h>
@@ -15,6 +16,7 @@
 #include "cobjc/UNNotificationRequest.h"
 #include "gtkextern.h"
 #include "intlextern.h"
+#include "iokitextern.h"
 
 #if __has_include(<libproc.h>)
 #include <libproc.h>
@@ -605,14 +607,18 @@ const char *second_to_datefmt(uint64_t second) {
 	
 	id s = ocall(fmt, stringFromTimeInterval:, (double)second);
 
-	const char *c = NULL;
-	if (s) {
-		c = (const char *)ocall_t(char*, s, UTF8String);
-	}
-
 	const char *ret = NULL;
-	if (c) {
-		ret = c;
+	if (s) {
+		// Copy the string to a static buffer to preserve it after pool draining
+		const char *c = (const char *)ocall_t(char*, s, UTF8String);
+		if (c) {
+			static char buffer[256];
+			strncpy(buffer, c, sizeof(buffer) - 1);
+			buffer[sizeof(buffer) - 1] = '\0';
+			ret = buffer;
+		} else {
+			ret = "";
+		}
 	} else {
 		ret = "";
 	}
@@ -643,6 +649,45 @@ id imageForSFProGlyph(CFStringRef glyph, CFStringRef fontName, CGFloat fontSize,
 	return ret;
 }
 
+id redrawUIImage(id image, UIColor *color, CGSize size) {
+	//extern void UIGraphicsBeginImageContextWithOptions(CGSize size, BOOL opaque, CGFloat scale);
+	extern CGContextRef UIGraphicsGetCurrentContext(void);
+	extern id UIGraphicsGetImageFromCurrentImageContext(void);
+	extern void UIGraphicsEndImageContext(void);
+
+	if (!image) return nil;
+	CGSize targetSize = CGSizeEqualToSize(size, CGSizeZero) ? ocall_t(CGSize, image, size) : size;
+	
+	if (!color) {
+		if (CGSizeEqualToSize(targetSize, ocall_t(CGSize, image, size))) {
+			return image;
+		} else {
+			UIGraphicsBeginImageContextWithOptions(targetSize, NO, ocall_t(CGFloat, image, scale));
+			ocall_t(void, image, drawInRect:, CGRectMake(0, 0, targetSize.width, targetSize.height));
+			id resized = UIGraphicsGetImageFromCurrentImageContext();
+			UIGraphicsEndImageContext();
+			return resized;
+		}
+	}
+	
+	UIGraphicsBeginImageContextWithOptions(targetSize, NO, ocall_t(CGFloat, image, scale));
+	CGContextRef ctx = UIGraphicsGetCurrentContext();
+	// UIKit drawing is flipped appropriately for UIImage drawing functions, but
+	// we use CoreGraphics clipping to mask so no extra transform is needed.
+	
+	CGContextSaveGState(ctx);
+	CGContextTranslateCTM(ctx, 0, targetSize.height);
+	CGContextScaleCTM(ctx, 1.0, -1.0); // flip because CGContextClipToMask expects CG coords
+	CGContextClipToMask(ctx, CGRectMake(0, 0, targetSize.width, targetSize.height), ocall_t(CGImageRef, image, CGImage));
+	CGContextSetFillColorWithColor(ctx, UIColorGetCGColor(color));
+	CGContextFillRect(ctx, CGRectMake(0, 0, targetSize.width, targetSize.height));
+	CGContextRestoreGState(ctx);
+	
+	id colored = UIGraphicsGetImageFromCurrentImageContext();
+	UIGraphicsEndImageContext();
+	return colored;
+}
+
 // HTML operations broken on Rosetta Sims pre iOS 14
 int is_rosetta(void) {
 	int    ret  = 0;
@@ -670,6 +715,159 @@ bool is_maccatalyst(void) {
 
 bool is_simulator(void) {
 	return getenv("SIMULATOR_DEVICE_NAME") != NULL;
+}
+
+bool is_ipad(void) {
+	static dispatch_once_t onceToken;
+	static bool            value;
+
+	dispatch_once(&onceToken, ^{
+		const char *simModel = NULL;
+		if (is_simulator() && (simModel = getenv("SIMULATOR_MODEL_IDENTIFIER")) != NULL) {
+			value = (strncmp(simModel, "iPad", 4) == 0);
+			return;
+		}
+
+		int    mib[2] = { CTL_HW, HW_MACHINE };
+		size_t len    = 0;
+		if (sysctl(mib, 2, NULL, &len, NULL, 0) != 0 || len == 0) {
+			value = false;
+			return;
+		}
+		char *machine = malloc(len + 1);
+		if (!machine) {
+			value = false;
+			return;
+		}
+		if (sysctl(mib, 2, machine, &len, NULL, 0) != 0) {
+			free(machine);
+			value = false;
+			return;
+		}
+		machine[len] = '\0';
+		value        = (strncmp(machine, "iPad", 4) == 0);
+		free(machine);
+	});
+
+	return value;
+}
+
+static bool simulator_has_homebutton(const char *model) {
+	if (!model)
+		return false;
+
+	int major = 0, minor = 0;
+	if (strncmp(model, "iPhone", 6) == 0) {
+		if (sscanf(model, "iPhone%d,%d", &major, &minor) != 2)
+			return false;
+		/* Pre-iPhone X have Home button */
+		if (major <= 9)
+			return true;
+		/* iPhone 8 / 8 Plus vs X: 10,3 and 10,6 are X (no Home) */
+		if (major == 10)
+			return !(minor == 3 || minor == 6);
+		/* SE 2 and SE 3 have Home button */
+		if (major == 12 && minor == 8)
+			return true; /* iPhone SE (2nd generation) */
+		if (major == 14 && minor == 6)
+			return true; /* iPhone SE (3rd generation) */
+		return false;
+	}
+	if (strncmp(model, "iPad", 4) == 0) {
+		/* Most iPads have a Home button; exclude known full-screen models */
+		if (strncmp(model, "iPad8,", 6) == 0)
+			return false; /* iPad Pro (3rd/4th gen, etc.) */
+		if (sscanf(model, "iPad%d,%d", &major, &minor) == 2) {
+			/* iPad Pro 11" / 12.9" M1/M2 and iPad 10th gen (approximate list) */
+			if (major == 13 && ((minor >= 4 && minor <= 7) || (minor >= 8 && minor <= 11) || (minor >= 16 && minor <= 19)))
+				return false;
+			if (major == 14 && (minor >= 3 && minor <= 6))
+				return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+bool has_homebutton(void) {
+#if TARGET_OS_IPHONE
+	static dispatch_once_t onceToken;
+	static bool            value;
+
+	dispatch_once(&onceToken, ^{
+		const char *simModel = NULL;
+		if (is_simulator() && (simModel = getenv("SIMULATOR_MODEL_IDENTIFIER")) != NULL) {
+			value = simulator_has_homebutton(simModel);
+			return;
+		}
+
+		if (!MGGetSInt32AnswerPtr) {
+			value = false;
+			return;
+		}
+
+		SInt32 hwValue = MGGetSInt32AnswerPtr(CFSTR("JwLB44/jEB8aFDpXQ16Tuw"), 0);
+		if (hwValue == 2) {
+			value = false;
+			return;
+		}
+		value = true;
+	});
+
+	return value;
+#else
+	return false;
+#endif
+}
+
+static bool simulator_has_island_notch(const char *model) {
+	if (!model)
+		return false;
+
+	int major = 0, minor = 0;
+	if (sscanf(model, "iPhone%d,%d", &major, &minor) != 2)
+		return false;
+
+	/* iPhone 14 and earlier */
+	if (major < 15)
+		return false;
+	/* iPhone 14 Pro/Pro Max */
+	if (major == 15 && (minor == 2 || minor == 3))
+		return true;
+	/* iPhone 15 Pro/Pro Max and above (except iPhone 16e) */
+	if (major >= 16 && !(major == 17 && minor == 5))
+		return true;
+
+	return false;
+}
+
+bool has_island_notch(void) {
+	static dispatch_once_t onceToken;
+	static bool            value;
+
+	dispatch_once(&onceToken, ^{
+		const char *simModel = NULL;
+		if (is_simulator() && (simModel = getenv("SIMULATOR_MODEL_IDENTIFIER")) != NULL) {
+			value = simulator_has_island_notch(simModel);
+			return;
+		}
+
+		io_registry_entry_t entry = IORegistryEntryFromPath(kIOMasterPortDefault, "IODeviceTree:/product");
+		if (!entry) {
+			value = false;
+			return;
+		}
+		CFTypeRef prop = IORegistryEntryCreateCFProperty(entry, CFSTR("island-notch-location"), kCFAllocatorDefault, 0);
+		IOObjectRelease(entry);
+		if (!prop) {
+			value = false;
+			return;
+		}
+		CFRelease(prop);
+		value = true;
+	});
+
+	return value;
 }
 
 int mkdir_p(const char *path, mode_t mode) {
@@ -765,6 +963,49 @@ const char *battman_config_dir(void) {
 		DBGLOG(CFSTR("battman_config_dir: %s"), confdir);
 	});
 	return confdir;
+}
+
+const char *battman_socket_path(void) {
+	static char *socket_path = NULL;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		// Try multiple fallback paths for iOS compatibility
+		const char *fallback_paths[] = {
+			NULL, // Will be filled with battman_config_dir()/dsck
+			"/var/tmp/battman-dsck",
+			"/private/var/tmp/battman-dsck",
+			"/var/db/battman-dsck",
+			"/private/var/db/battman-dsck",
+			NULL
+		};
+		
+		// First try the original config dir path
+		char config_path[PATH_MAX];
+		snprintf(config_path, sizeof(config_path), "%s/dsck", battman_config_dir());
+		fallback_paths[0] = config_path;
+		
+		// Try each path until we find one that fits in sun_path
+		for (int i = 0; fallback_paths[i] != NULL; i++) {
+			size_t path_len = strlen(fallback_paths[i]);
+
+			if (path_len < 104) {
+				socket_path = strdup(fallback_paths[i]);
+				if (socket_path != NULL) {
+					DBGLOG(CFSTR("battman_socket_path: Using socket path: %s"), socket_path);
+					return;
+				}
+			}
+		}
+		
+		// Final fallback if all else fails
+		socket_path = strdup("/tmp/battman-dsck");
+		if (socket_path == NULL) {
+			os_log_fault(gLog, "battman_socket_path: Cannot allocate memory for socket path");
+			static char emergency_fallback[] = "/tmp/battman-dsck";
+			socket_path = emergency_fallback;
+		}
+	});
+	return socket_path;
 }
 
 /* Consider use NSDefaults instead of file */
@@ -1079,6 +1320,31 @@ bool metal_available(bool ignore_config) {
 done:
 	DBGLOG(CFSTR("metal_available: %s, reason: %s"), ret ? "YES" : "NO", reason ? reason : "");
 	return ret;
+}
+
+bool set_badge(const char *text) {
+	id sbs = ocall(oclass(NSBundle), systemBundleWithName:, CFSTR("SpringBoardServices"));
+	if (sbs == nil || !ocall_t(bool, sbs, load))
+		return false;
+	Class SBSHomeScreenService = ocall(sbs, classNamed:, CFSTR("SBSHomeScreenService"));
+	if (SBSHomeScreenService == nil)
+		return false;
+	id hsc = objc_alloc_init(SBSHomeScreenService);
+	if (hsc == nil)
+		return false;
+	CFStringRef bundleid = NULL;
+	CFBundleRef bundle = CFBundleGetMainBundle();
+	if (bundle == nil)
+		return false;
+	bundleid = CFBundleGetIdentifier(bundle);
+	CFStringRef cfstr = NULL;
+	if (!text || !strlen(text))
+		cfstr = CFSTR("");
+	else
+		cfstr = CFStringCreateWithCString(kCFAllocatorDefault, text, kCFStringEncodingUTF8);
+	// ent: com.apple.springboard.configureHomeScreenForTesting
+	ocall_t(void, hsc, overrideBadgeValue:forBundleIdentifier:, cfstr, bundleid);
+	return true;
 }
 
 id perform_selector(SEL selector, id target, id arg1) {

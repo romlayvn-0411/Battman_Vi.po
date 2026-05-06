@@ -51,54 +51,40 @@ L.battman.bootstrap.checkdone.1:
 	mov x2,x20
 L.battman.bootstrap.checkdone.2:
 	bl _objc_msgSend
-	;mov x2,x0
-	;adrp x1,sel.setWindow@PAGE
-	;ldr x1,[x1,sel.setWindow@PAGEOFF]
-	;mov x0,x19
 	mov x19,x0
 	adrp x3,_gWindow@PAGE
 	str x0,[x3,_gWindow@PAGEOFF]
-	;bl _objc_msgSend
 	adrp x1,sel.1new@PAGE
 	ldr x1,[x1,sel.1new@PAGEOFF]
 	adrp x0,_OBJC_CLASS_$_UITabBarController@GOTPAGE
 	ldr x0,[x0,_OBJC_CLASS_$_UITabBarController@GOTPAGEOFF]
 	bl _objc_msgSend
 	str x0,[sp,#24]
+	mov x20,sp
 	adrp x0,_OBJC_CLASS_$_BatteryInfoViewController@PAGE
 	add x0,x0,_OBJC_CLASS_$_BatteryInfoViewController@PAGEOFF
-	mov x1,sp
+	mov x1,x20
 	bl .createNC
+	add x20,x20,#8
 #ifdef DEBUG
 #warning remember to finalize this block when releasing AnalyticsViewController
 	adrp x0,_OBJC_CLASS_$_AnalyticsViewController@PAGE
 	add x0,x0,_OBJC_CLASS_$_AnalyticsViewController@PAGEOFF
-	add x1,sp,#8
+	mov x1,x20
 	bl .createNC
-	adrp x0,_OBJC_CLASS_$_SettingsViewController@PAGE
-	add x0,x0,_OBJC_CLASS_$_SettingsViewController@PAGEOFF
-	add x1,sp,#16
-	bl .createNC
-#else
-	adrp x0,_OBJC_CLASS_$_SettingsViewController@PAGE
-	add x0,x0,_OBJC_CLASS_$_SettingsViewController@PAGEOFF
-	add x1,sp,#8
-	bl .createNC
+	add x20,x20,#8
 #endif
-	;adrp x0,_OBJC_CLASS_$_NSArray@GOTPAGE
-	;ldr x0,[x0,_OBJC_CLASS_$_NSArray@GOTPAGEOFF]
-	;adrp x1,.sel.arrwobjs@PAGE
-	;ldr x1,[x1,.sel.arrwobjs@PAGEOFF]
+	adrp x0,_OBJC_CLASS_$_SettingsViewController@PAGE
+	add x0,x0,_OBJC_CLASS_$_SettingsViewController@PAGEOFF
+	mov x1,x20
+	bl .createNC
+	add x20,x20,#8
 	bl show_license
 	cbz x0,.createNC
 	mov x0,x19
 	mov x2,sp
-#ifdef DEBUG
-#warning remember to finalize this block when releasing AnalyticsViewController
-	mov x3,#3
-#else
-	mov x3,#2
-#endif
+	mov x3,sp
+	sub x3,x20,x3
 	bl _objc_msgSend
 	adrp x1,.sel.setRootVCs@PAGE
 	ldr x1,[x1,.sel.setRootVCs@PAGEOFF]
@@ -462,17 +448,12 @@ makeBarButtonItem:
 	stp x29,x30,[sp,#48]
 	str x1,[sp,#16]
 	str x2,[sp,#32]
-#if 0
-	bl ___CFStringMakeConstantString
-	mov x24,x0
-#else
-    mov x1, x0
-    mov x0, xzr
-    movz x2, #0x0100
-    movk x2, #0x0800, lsl #16 ; kCFStringEncodingUTF8
-    bl _CFStringCreateWithCString
-    mov x24, x0
-#endif
+	mov x1, x0
+	mov x0, xzr
+	movz x2, #0x0100
+	movk x2, #0x0800, lsl #16 ; kCFStringEncodingUTF8
+	bl _CFStringCreateWithCString
+	mov x24, x0
 	adrp x0,__NSConcreteStackBlock@GOTPAGE
 	ldr x0,[x0,__NSConcreteStackBlock@GOTPAGEOFF]
 	mov x1,#0x60000000
@@ -552,18 +533,11 @@ show_license.pcb:
 	adrp x1,sel.navItem@PAGE
 	ldr x1,[x1,sel.navItem@PAGEOFF]
 	bl _objc_msgSend
-	;adrp x1,sel.topItem@PAGE
-	;ldr x1,[x1,sel.topItem@PAGEOFF]
-	;bl _objc_msgSend
 	str x21,[sp,#16]
 	mov x21,x0
 	adrp x0,licenseStr@PAGE
 	add x0,x0,licenseStr@PAGEOFF
-#if 0
-	bl ___CFStringMakeConstantString
-#else
-    bl _cond_localize
-#endif
+	bl _cond_localize
 	mov x2,x0
 	mov x0,x21
 	adrp x1,sel.setTitle@PAGE
@@ -582,7 +556,7 @@ show_license.pcb:
 	adrp x0,agreeStr@PAGE
 	add x0,x0,agreeStr@PAGEOFF
 #ifdef USE_GETTEXT
-    bl _cond_localize_c
+	bl _cond_localize_c
 #endif
 	mov x2,#0
 	adrp x1,show_license.a@PAGE
@@ -592,7 +566,7 @@ show_license.pcb:
 	adrp x0,declineStr@PAGE
 	add x0,x0,declineStr@PAGEOFF
 #ifdef USE_GETTEXT
-    bl _cond_localize_c
+	bl _cond_localize_c
 #endif
 	adrp x1,show_license.susp@PAGE
 	add x1,x1,show_license.susp@PAGEOFF
@@ -620,45 +594,14 @@ show_license.pcb:
 	bl _objc_msgSend
 	add sp,sp,#32
 	str x0,[sp,#8]
-#if 0
-	adrp x0,_OBJC_CLASS_$_WKWebView@GOTPAGE
-	ldr x0,[x0,_OBJC_CLASS_$_WKWebView@GOTPAGEOFF]
-	adrp x1,sel.1new@PAGE
-	ldr x1,[x1,sel.1new@PAGEOFF]
-	bl _objc_msgSend
-	;str x0,[sp,#8]
-	mov x21,x0
-	;str x21,[sp,#16]
-	;ldr x21,[sp,#8]
-	/*mov x0,x20
-	 adrp x1,sel.frame@PAGE
-	 ldr x1,[x1,sel.frame@PAGEOFF]
-	 bl _objc_msgSend
-	 adrp x1,sel.setFrame@PAGE
-	 ldr x1,[x1,sel.setFrame@PAGEOFF]
-	 mov x2,x0
-	 mov x0,x21
-	 bl _objc_msgSend*/
-#else
 	; Create WebView with proper frame and configuration
 	mov x0,x20
-	adrp x1,sel.bounds@PAGE
-	ldr x1,[x1,sel.bounds@PAGEOFF]
-	bl _objc_msgSend
-	; x0-x3 now contain CGRect (origin.x, origin.y, size.width, size.height)
 
 #ifdef USE_UIWEBVIEW
-	adrp x0,UIWebView_str@PAGE
-	add x0,x0,UIWebView_str@PAGEOFF
-	bl _objc_getRequiredClass
-	cbz x0,wv_simple
-	adrp x1,allocSel@PAGE
-	ldr x1,[x1,allocSel@PAGEOFF]
-	bl _objc_msgSend
-	cbz x0,wv_simple
-	; Frame data is already in d0-d3
-	adrp x1,sel.initWithFrame@PAGE
-	ldr x1,[x1,sel.initWithFrame@PAGEOFF]
+	adrp x0,_OBJC_CLASS_$_UIWebView@GOTPAGE
+	ldr x0,[x0,_OBJC_CLASS_$_UIWebView@GOTPAGEOFF]
+	adrp x1,sel.1new@PAGE
+	ldr x1,[x1,sel.1new@PAGEOFF]
 	bl _objc_msgSend
 	mov x21,x0
 	mov x0,x21
@@ -673,107 +616,82 @@ show_license.pcb:
 	adrp x2,sel.systemBackgroundColor@PAGE
 	ldr x2,[x2,sel.systemBackgroundColor@PAGEOFF]
 	bl _objc_msgSend
-	cbz x0,wv_b_w
+	cbz x0,Lwv_b_w
 	adrp x0,_OBJC_CLASS_$_UIColor@GOTPAGE
 	ldr x0,[x0,_OBJC_CLASS_$_UIColor@GOTPAGEOFF]
 	adrp x1,sel.systemBackgroundColor@PAGE
 	ldr x1,[x1,sel.systemBackgroundColor@PAGEOFF]
 	bl _objc_msgSend
-	cbz x0,wv_b_w
-	b wv_b
-wv_b_w:
+	cbz x0,Lwv_b_w
+	b Lwv_b
+Lwv_b_w:
 	adrp x0,_OBJC_CLASS_$_UIColor@GOTPAGE
 	ldr x0,[x0,_OBJC_CLASS_$_UIColor@GOTPAGEOFF]
 	adrp x1,sel.whiteColor@PAGE
 	ldr x1,[x1,sel.whiteColor@PAGEOFF]
 	bl _objc_msgSend
-	cbz x0,wv_done
-wv_b:
+	cbz x0,Lwv_done
+Lwv_b:
 	mov x2,x0
 	mov x0,x21
 	adrp x1,sel.setBackgroundColor@PAGE
 	ldr x1,[x1,sel.setBackgroundColor@PAGEOFF]
 	bl _objc_msgSend
 #else
-	sub sp,sp,#64
-	stp d0,d1,[sp]
-	stp d2,d3,[sp,#16]
-	adrp x0,WKWebViewConfiguration_str@PAGE
-	add x0,x0,WKWebViewConfiguration_str@PAGEOFF
-	bl _objc_getRequiredClass
-	cbz x0,wv_simple
+	sub sp,sp,#16
+	stp x22,x23,[sp]
+	adrp x0,_OBJC_CLASS_$_WKWebViewConfiguration@GOTPAGE
+	ldr x0,[x0,_OBJC_CLASS_$_WKWebViewConfiguration@GOTPAGEOFF]
 	adrp x1,sel.1new@PAGE
 	ldr x1,[x1,sel.1new@PAGEOFF]
 	bl _objc_msgSend
 	cbz x0,wv_simple
-	str x0,[sp,#32]
-	adrp x0,WKUserScript_str@PAGE
-	add x0,x0,WKUserScript_str@PAGEOFF
-	bl _objc_getRequiredClass
+	mov x22,x0
+	adrp x0,_OBJC_CLASS_$_WKUserScript@GOTPAGE
+	ldr x0,[x0,_OBJC_CLASS_$_WKUserScript@GOTPAGEOFF]
 	adrp x1,allocSel@PAGE
 	ldr x1,[x1,allocSel@PAGEOFF]
 	bl _objc_msgSend
-	str x0,[sp,#40]
+	mov x23,x0
 	adrp x0,js_disable_sharedworker@PAGE
 	add x0,x0,js_disable_sharedworker@PAGEOFF
 	bl ___CFStringMakeConstantString
-	str x0,[sp,#48]
-	ldr x0,[sp,#40]     ; WKUserScript instance
+	mov x2,x0
+	mov x0,x23
 	adrp x1,sel.initWithSourceInjectionTime@PAGE
 	ldr x1,[x1,sel.initWithSourceInjectionTime@PAGEOFF]
-	ldr x2,[sp,#48]
-	mov x3,#0
-	mov x4,#0
+	mov x3,xzr
+	mov x4,xzr
 	bl _objc_msgSend
-	str x0,[sp,#40]
-	; Get userContentController from configuration
-	ldr x0,[sp,#32]     ; WKWebViewConfiguration
+	mov x23,x0
+	mov x0,x22
 	adrp x1,sel.userContentController@PAGE
 	ldr x1,[x1,sel.userContentController@PAGEOFF]
 	bl _objc_msgSend
-	str x0,[sp,#56]
-	ldr x0,[sp,#56]
 	adrp x1,sel.addUserScript@PAGE
 	ldr x1,[x1,sel.addUserScript@PAGEOFF]
-	ldr x2,[sp,#40]
+	mov x2,x23
 	bl _objc_msgSend
 	adrp x0,_OBJC_CLASS_$_WKWebView@GOTPAGE
 	ldr x0,[x0,_OBJC_CLASS_$_WKWebView@GOTPAGEOFF]
 	adrp x1,allocSel@PAGE
 	ldr x1,[x1,allocSel@PAGEOFF]
 	bl _objc_msgSend
-	cbz x0,wv_simple
 	adrp x1,sel.initWithFrameConfiguration@PAGE
 	ldr x1,[x1,sel.initWithFrameConfiguration@PAGEOFF]
-	ldp d0,d1,[sp]      ; Frame origin (x, y)
-	ldp d2,d3,[sp,#16]  ; Frame size (width, height)
-	ldr x2,[sp,#32]     ; WKWebViewConfiguration
+	mov x2,x22
+	mov d0,#0
+	mov d1,#0
+	mov d2,#0
+	mov d3,#0
 	bl _objc_msgSend
-	cbz x0,wv_simple
-	add sp,sp,#64
+	ldp x22,x23,[sp]
+	add sp,sp,#16
 	mov x21,x0
-	b wv_done
+	b Lwv_done
 #endif
-
-wv_simple:
-#ifndef USE_UIWEBVIEW
-	ldp d0,d1,[sp]      ; Frame origin (x, y)
-	ldp d2,d3,[sp,#16]  ; Frame size (width, height)
-	add sp,sp,#64  ; Clean up stack
-	adrp x0,_OBJC_CLASS_$_WKWebView@GOTPAGE
-	ldr x0,[x0,_OBJC_CLASS_$_WKWebView@GOTPAGEOFF]
-	adrp x1,allocSel@PAGE
-	ldr x1,[x1,allocSel@PAGEOFF]
-	bl _objc_msgSend
-	; Frame data is already in d0-d3
-	adrp x1,sel.initWithFrame@PAGE
-	ldr x1,[x1,sel.initWithFrame@PAGEOFF]
-	bl _objc_msgSend
-	mov x21,x0
-#endif
-
-wv_done:
-#endif
+Lwv_simple:
+Lwv_done:
 	mov x0,x20
 	mov x2,x21
 	adrp x1,sel.addSubview@PAGE
@@ -853,8 +771,8 @@ wv_done:
 	adrp x10,.lfd.1@PAGE
 	ldr x1,[x10,.lfd.1@PAGEOFF]
 	; Check if we have valid content
-	cbz x1,load_from_url
-	cbz x2,load_from_url
+	cbz x1,Load_from_url
+	cbz x2,Load_from_url
 	sub sp,sp,#64
 	mov x0,x1
 	mov x1,x2
@@ -872,13 +790,8 @@ wv_done:
 	umov w0,v0.b[0]
 	add sp,sp,#64
 	cmp w0,#0xFF
-	b.eq load_local_html
-
-load_from_url:
-	; I've decided to fallback to URL, but this does not seems safe enough
-	bl _showCompletionAlert
-
-load_local_html:
+Load_from_url:
+Load_local_html:
 	; Load local HTML content
 	mov x0,#0
 	adrp x3,.lfd.s@PAGE
@@ -913,16 +826,14 @@ load_local_html:
 	ldr x2,[sp,#8]
 	mov x0,x20
 #ifdef USE_UIWEBVIEW
-	; UIWebView uses loadHTMLString:baseURL: method
 	adrp x1,sel.loadHTMLStringBaseURL@PAGE
 	ldr x1,[x1,sel.loadHTMLStringBaseURL@PAGEOFF]
 #else
-	; WKWebView uses loadHTMLString:baseURL: method
 	adrp x1,sel.loadHTMLString@PAGE
 	ldr x1,[x1,sel.loadHTMLString@PAGEOFF]
 #endif
 	bl _objc_msgSend
-continue_setup:
+
 	mov x0,x19
 	ldr x2,[sp]
 	adrp x1,s.setRootVC@PAGE
@@ -971,11 +882,48 @@ show_license:
 	bl _memcpy
 	mov x0,x20
 	bl _IOObjectRelease
-	mov x0,sp
-	mov x1,#64
 	sub sp,sp,#32
+	mov x1,xzr
+	movk x1,#0x7272,LSL #48
+	movk x1,#28532,LSL #32
+	str x1,[sp]
+	mov w1,#0x6f63
+	movk w1,#0xf36d,LSL #16
+	str w1,[sp]
+	mov w1,#0x2e0
+	lsr w1,w1,#4
+	strb w1,[sp,#3]
+	mov x1,#0x6b65
+	movk x1,#0x6569,LSL #16
+	movk x1,#0x7461,LSL #48
+	str x1,[sp,#8]
+	mov x2,#0x422e
+	movk x2,#0x6d74,LSL #16
+	movk x2,#0x6e61,LSL #32
+	strh w2,[sp,#12]
+	lsr x1,x2,#16
+	str w1,[sp,#16]
+	mov x3,#0x482e
+	movk x3,#0x7661,LSL #16
+	movk x3,#0x636f,LSL #32
+	bl _susp_id
+	lsr x3,x3,x0
+	lsl x3,x3,x0
+	str w3,[sp,#20]
+	lsr x3,x3,#32
+	str w3,[sp,#24]
+	bl _CFBundleGetMainBundle
+	bl _CFBundleGetIdentifier
+	mov x1,#0x0100
+	movk x1,#0x0800,LSL #16
+	bl _CFStringGetCStringPtr
+	mov x1,sp
+	bl _strcmp
 	;sub x2,x0,sp
+	mov x1,#64
 	mov x2,sp
+	add x0,x2,x0
+	add x0,x0,#32
 	bl _CC_SHA256
 	bl _battman_config_dir
 	mov x20,x0
@@ -1031,7 +979,7 @@ show_license.1.svc:
 	bl _objc_msgSend
 	adrp x9,.osSupportsUIScene@PAGE
 	ldr x9,[x9,.osSupportsUIScene@PAGEOFF]
-	tbz x9,#0,show_license.1.noscene
+	cbz x9,show_license.1.noscene
 	mov x0,x20
 	adrp x1,sel.connectedScenes@PAGE
 	ldr x1,[x1,sel.connectedScenes@PAGEOFF]
@@ -1098,11 +1046,10 @@ show_license.3:
 	ldr x1,[x1,.sel.arrwobjs@PAGEOFF]
 	adrp x0,_OBJC_CLASS_$_NSArray@GOTPAGE
 	ldr x0,[x0,_OBJC_CLASS_$_NSArray@GOTPAGEOFF]
+	mov x3,#2
 #ifdef DEBUG
 #warning remember to finalize this block when releasing AnalyticsViewController
-	mov x3,#3
-#else
-	mov x3,#2
+	add x3,x3,#1
 #endif
 	bl _objc_msgSend
 	mov x2,x0
@@ -1293,12 +1240,6 @@ UIWindow_str:
 .asciz "UIWindow"
 UISceneDelegate_str:
 .asciz "UISceneDelegate"
-WKWebViewConfiguration_str:
-.asciz "WKWebViewConfiguration"
-WKUserScript_str:
-.asciz "WKUserScript"
-UIWebView_str:
-.asciz "UIWebView"
 uiresponderclass:
 .asciz "SceneDelegateBase"
 curDevStr:

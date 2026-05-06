@@ -273,16 +273,17 @@ struct battery_info_section *bi_make_section(const char *name, uint64_t context_
 	section->self_ref                    = NULL;
 	memcpy(&section->data, section_begin, size);
 	*(char **)((uint64_t)section + size + 24) = NULL;
-	section->context                          = (struct battery_info_section_context *)((uint64_t)section + size + 32);
+	section->context=(struct battery_info_section_context *)((uint64_t)section + size + 32);
+	// Initialize context fields
+	memset(section->context, 0, context_size);
 	return section;
 }
 
 void bi_destroy_section(struct battery_info_section *sect) {
-	if (sect->self_ref)
-		battery_info_remove_section(sect);
+	if (!sect || !sect->context)
+		return;
+	
 	sect->data[0].name = NULL;   // This is to tell update() that the section is being destroyed
-	sect->context->update(sect); // update() will have to release resources
-	free(sect);
 }
 
 void bi_node_change_content_value(struct battery_info_node *node,
@@ -358,10 +359,10 @@ char *bi_node_get_string(struct battery_info_node *node) {
 }
 
 void bi_node_free_string(struct battery_info_node *node) {
-	if (!node->content)
+	uint32_t old = __atomic_exchange_n(&node->content, 0, __ATOMIC_ACQ_REL);
+	if (!old)
 		return;
-	vm_deallocate(mach_task_self(), (vm_address_t)bi_node_get_string(node), 256);
-	node->content = 0;
+	vm_deallocate(mach_task_self(), (vm_address_t)(((uint64_t)old)<<3), 256);
 }
 
 static int _impl_set_item_find_item(struct battery_info_node **head, const char *desc) {
@@ -443,36 +444,38 @@ void battery_info_init(struct battery_info_section **ptr) {
 void battery_info_insert_section(struct battery_info_section *sect, struct battery_info_section **ptr) {
 	if (!ptr)
 		return;
-	if (!*ptr) {
-		*ptr           = sect;
-		sect->next     = NULL;
+	struct battery_info_section *head = __atomic_load_n(ptr, __ATOMIC_ACQUIRE);
+	if (!head || SECTION_PRIORITY(sect) > SECTION_PRIORITY(head)) {
+		sect->next = head;
+		if (head)
+			head->self_ref = &sect->next;
 		sect->self_ref = ptr;
+		__atomic_store_n(ptr, sect, __ATOMIC_RELEASE);
 		return;
 	}
-	if (SECTION_PRIORITY(sect) <= SECTION_PRIORITY(*ptr)) {
-		for (;; ptr = &(*ptr)->next) {
-			if (!*ptr || SECTION_PRIORITY(sect) > SECTION_PRIORITY(*ptr)) {
-				sect->next     = *ptr;
-				if(*ptr)
-					sect->next->self_ref=&sect->next;
-				*ptr           = sect;
-				sect->self_ref = ptr;
-				return;
-			}
+	for (;; ptr = &(*ptr)->next) {
+		struct battery_info_section *cur = __atomic_load_n(ptr, __ATOMIC_ACQUIRE);
+		if (!cur || SECTION_PRIORITY(sect) > SECTION_PRIORITY(cur)) {
+			sect->next = cur;
+			if (cur)
+				cur->self_ref = &sect->next;
+			sect->self_ref = ptr;
+			__atomic_store_n(ptr, sect, __ATOMIC_RELEASE);
+			return;
 		}
-	} else {
-		sect->next     = *ptr;
-		if(*ptr)
-			sect->next->self_ref=&sect->next;
-		*ptr           = sect;
-		sect->self_ref = ptr;
 	}
 }
 
-void battery_info_remove_section(struct battery_info_section *sect) {
-	*(sect->self_ref) = sect->next;
-	sect->self_ref    = NULL;
-	sect->next        = NULL;
+int battery_info_remove_section(struct battery_info_section *sect) {
+	if (sect->self_ref) {
+		if(!__atomic_compare_exchange(sect->self_ref,&sect,&sect->next,true,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
+			return 0;
+		if(sect->next)
+			__atomic_store_n(&sect->next->self_ref,sect->self_ref,__ATOMIC_RELEASE);
+		__atomic_store_n(&sect->self_ref,NULL,__ATOMIC_RELEASE);
+	}
+	__atomic_store_n(&sect->next,NULL,__ATOMIC_RELAXED);
+	return 1;
 }
 
 static int battery_info_has(struct battery_info_section *head, uint64_t identifier) {
@@ -522,17 +525,28 @@ void battery_info_poll(struct battery_info_section **head) {
 	}
 }
 
-// Recursive call is used to support section removal while updating
-static void _battery_info_update(struct battery_info_section *node) {
-	if (node->next)
-		_battery_info_update(node->next);
-	node->context->update(node);
-}
-
 void battery_info_update(struct battery_info_section **head) {
 	battery_info_poll(head);
-	if (*head)
-		_battery_info_update(*head);
+	int retry=1;
+	while(*head&&retry) {
+		retry=0;
+		for(struct battery_info_section *i=*head;i;i=i->next) {
+			if(!i->data[0].name) {
+				retry=1;
+				if(battery_info_remove_section(i)) {
+					i->context->update(i);
+					free(i);
+				}
+				break;
+			}
+			i->context->update(i);
+			if(!i->data[0].name) {
+				// just removed
+				retry=1;
+				break;
+			}
+		}
+	}
 }
 
 struct battery_info_section *battery_info_get_section(struct battery_info_section *head, long n) {

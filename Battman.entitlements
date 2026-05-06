@@ -2,13 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>allow-softwareupdated</key>
+	<true/>
 	<key>application-identifier</key>
 	<string>com.torrekie.Battman</string>
-	<!-- Do we really need this?
+	<key>com.apple.developer.team-identifier</key>
+	<string>HJN7NN4K32</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>com.torrekie.Battman</string>
-	</array>-->
+	</array>
 	<key>com.apple.CommCenter.fine-grained</key>
 	<array>
 		<string>internal</string>
@@ -17,6 +20,8 @@
 	</array>
 
 	<key>platform-application</key>
+	<true/>
+	<key>com.apple.springboard.appbackgroundstyle</key>
 	<true/>
 
 	<key>com.apple.private.tcc.allow</key>
@@ -92,6 +97,12 @@
 	<key>com.apple.system.get-hardware-identifiers</key>
 	<true/>
 
+	<!-- IOMobileFramebuffer/DFR-->
+        <key>com.apple.private.iomfb.set-block</key>
+        <true/>
+        <key>com.apple.private.dfr.brightness-access</key>
+        <true/>
+
 	<!-- Security exceptions -->
 	<key>com.apple.security.system-groups</key>
 	<array>
@@ -153,6 +164,8 @@
 
 	<!-- SpringBoard -->
 	<key>com.apple.springboard.setIdleText</key>
+	<true/>
+	<key>com.apple.springboard.configureHomeScreenForTesting</key>
 	<true/>
 
 	<!-- MobileGestalt -->

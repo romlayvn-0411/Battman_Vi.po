@@ -127,13 +127,8 @@ typedef enum {
 	BATTMAN_SUBPROCESS,
 } battman_type_t;
 
-#ifdef DEBUG
-#warning Remember to finalize ENABLE_BRIGHTNESS when releasing
-#define ENABLE_BRIGHTNESS 1
-#endif
-
 #ifndef BATTMAN_DOC_URL
-#define BATTMAN_DOC_URL "https://github.com/Torrekie/Battman/wiki"
+#define BATTMAN_DOC_URL "https://battman-docs.torrekie.com"
 #endif
 
 __BEGIN_DECLS
@@ -193,8 +188,12 @@ const char *second_to_datefmt(uint64_t second);
 int         is_rosetta(void);
 bool        is_maccatalyst(void);
 bool        is_simulator(void);
+bool        is_ipad(void);
+bool        has_homebutton(void);
+bool        has_island_notch(void);
 
 const char *battman_config_dir(void);
+const char *battman_socket_path(void);
 const char *lang_cfg_file(void);
 int         open_lang_override(int flags, int mode);
 int         preferred_language_code(void);
@@ -211,6 +210,8 @@ int         add_notification(const char *bundleid, const char *title, const char
 int         add_notification_with_content(UNUserNotificationCenter *uc, UNMutableNotificationContent *content);
 
 bool        metal_available(bool ignore_config);
+
+bool        set_badge(const char *text);
 
 id          perform_selector(SEL selector, id target, id arg1);
 id          perform_selector2(SEL selector, id target, id arg1, id arg2);
